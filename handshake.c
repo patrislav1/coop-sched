@@ -1,8 +1,10 @@
+#include "handshake.h"
+
 #include <stddef.h>
 #include <stdint.h>
+#include <stdnoreturn.h>
 
 // platform specific includes
-#include "handshake.h"
 #include "sam4l.h"
 
 // Main task represents the task from which all other tasks are started
@@ -14,16 +16,16 @@ static hs_task_t *tasks_running = &main_task, *current_task = &main_task;
 #pragma GCC diagnostic ignored "-Wpacked"
 
 typedef struct context {
-    uint32_t r4, r5, r6, r7, r8, r9, r10, r11;
-    uint32_t r0, r1, r2, r3, r12, lr, pc, xpsr;
+    uint32_t r4, r5, r6, r7, r8, r9, r10, r11;   // Context stored explicitly (by software)
+    uint32_t r0, r1, r2, r3, r12, lr, pc, xpsr;  // Context stored implicitly (by hardware)
 } __attribute__((packed)) context_t;
 
 #pragma GCC diagnostic pop
 
-// Prototype to make gcc happy
+// Prototype to make gcc happy (inline asm doesn't find static functions)
 uintptr_t hs_context_switch(uintptr_t sp);
 
-// Called from PendSV_Handler
+// Context switcher; called from PendSV_Handler
 uintptr_t hs_context_switch(uintptr_t sp)
 {
     current_task->sp_current = sp;
@@ -35,6 +37,7 @@ uintptr_t hs_context_switch(uintptr_t sp)
     return current_task->sp_current;
 }
 
+// Add task to list of running tasks
 static void hs_task_insert(hs_task_t* t, hs_task_t** list)
 {
     // Find last task in list
@@ -46,6 +49,7 @@ static void hs_task_insert(hs_task_t* t, hs_task_t** list)
     t->next = NULL;
 }
 
+// Remove task from list of running tasks
 static void hs_task_remove(hs_task_t* t, hs_task_t** list)
 {
     hs_task_t* prev;
@@ -61,14 +65,19 @@ static void hs_task_remove(hs_task_t* t, hs_task_t** list)
     t->next = NULL;
 }
 
-static void hs_task_wrapper(hs_task_t* task, task_fn_t task_fn, void* task_arg)
+// Run the task function, then remove task and trigger scheduler
+static void noreturn hs_task_wrapper(hs_task_t* task, task_fn_t task_fn, void* task_arg)
 {
     task_fn(task_arg);
 
     hs_task_remove(task, &tasks_running);
     hs_yield();
+
+    while (1) {
+    };
 }
 
+// Create task and add it to the list of running tasks
 void hs_task_create(hs_task_t* task,
                     task_fn_t task_fn,
                     void* task_arg,
@@ -81,6 +90,8 @@ void hs_task_create(hs_task_t* task,
         .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,
         .next = NULL,
     };
+
+    // Initialize stack with initial context
     *((context_t*)task->sp_current) = (context_t){
         .xpsr = 1 << 24,  // set T-bit
         .pc = (uint32_t)hs_task_wrapper,
