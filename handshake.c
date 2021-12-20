@@ -29,8 +29,8 @@ uintptr_t hs_context_switch(uintptr_t sp)
     current_task->sp_current = sp;
     current_task = current_task->next;
     if (!current_task) {
-        // End of list reached; start again at beginning
-        current_task = tasks_running;
+        // End of list reached; start again at beginning (Main task doesn't work)
+        current_task = tasks_running->next;
     }
     return current_task->sp_current;
 }
