@@ -6,7 +6,6 @@
 
         .extern hs_context_switch
 
-        .global SVC_Handler
         .global PendSV_Handler
 
         .thumb_func
@@ -31,17 +30,3 @@ PendSV_Handler:
 
         .fnend
         .size PendSV_Handler, .-PendSV_Handler
-
-        .thumb_func
-        .type SVC_Handler, %function
-SVC_Handler:
-        .fnstart
-        .cantunwind
-
-        bx lr
-
-        .fnend
-        .size SVC_Handler, .-SVC_Handler
-
-        .balign 4
-        .end

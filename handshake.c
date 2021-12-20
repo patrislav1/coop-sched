@@ -57,6 +57,8 @@ static void hs_task_remove(hs_task_t* t, hs_task_t** list)
     }
     // Make previous element point to the one after
     prev->next = t->next;
+    // Tie any loose ends for the scheduler
+    t->next = NULL;
 }
 
 static void hs_task_wrapper(hs_task_t* task, task_fn_t task_fn, void* task_arg)
@@ -95,7 +97,6 @@ void hs_task_create(hs_task_t* task,
 void hs_init(void)
 {
     const uint32_t handler_prio = 255;  // lowest priority
-    NVIC_SetPriority(SVCall_IRQn, handler_prio);
     NVIC_SetPriority(PendSV_IRQn, handler_prio);
 }
 
