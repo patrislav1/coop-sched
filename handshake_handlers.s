@@ -1,5 +1,5 @@
 .syntax unified
-.equ EXC_RETURN, 0xfffffffd
+.equ EXC_RETURN, 0xfffffff9
 
         .section .text
         .thumb
@@ -15,7 +15,7 @@ PendSV_Handler:
         .fnstart
         .cantunwind
 
-        mrs r0, psp
+        mrs r0, msp
         mov r1, #0
         stmdb r0!, {r4-r11}
 
@@ -25,7 +25,7 @@ PendSV_Handler:
         ldmia r0!, {r4-r11}
 
         mvn lr, #~EXC_RETURN
-        msr psp, r0
+        msr msp, r0
 
         bx lr
 

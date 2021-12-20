@@ -29,8 +29,8 @@ uintptr_t hs_context_switch(uintptr_t sp)
     current_task->sp_current = sp;
     current_task = current_task->next;
     if (!current_task) {
-        // End of list reached; start again at beginning (Main task doesn't work)
-        current_task = tasks_running->next;
+        // End of list reached; start again at beginning
+        current_task = tasks_running;
     }
     return current_task->sp_current;
 }
@@ -76,7 +76,7 @@ void hs_task_create(hs_task_t* task,
     // Initialize task struct
     *task = (hs_task_t){
         .stack_bottom = (uintptr_t)stack,
-        .sp_current = (uintptr_t)(stack) + (stack_size & ~7) - sizeof(context_t),
+        .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,
         .next = NULL,
     };
     *((context_t*)task->sp_current) = (context_t){
