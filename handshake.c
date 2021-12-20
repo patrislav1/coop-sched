@@ -53,6 +53,8 @@ static void hs_task_insert(hs_task_t* t, hs_task_t** list)
 }
 
 // Remove task from list of running tasks
+// This will not work if the task to remove is on top of the list;
+// we assume that the main task runs forever and is never removed.
 static void hs_task_remove(hs_task_t* t, hs_task_t** list)
 {
     hs_task_t* prev;
@@ -110,13 +112,13 @@ void hs_task_create(hs_task_t* task,
 void hs_init(void)
 {
     // Set scheduler to lowest priority
-    const uint32_t handler_prio = 255;
-    NVIC_SetPriority(PendSV_IRQn, handler_prio);
+    const uint32_t lowest_prio = 255;
+    NVIC_SetPriority(PendSV_IRQn, lowest_prio);
 }
 
 void hs_yield(void)
 {
-    // Invoke scheduler
+    // Trigger pendable service; invokes scheduler
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
     __DSB();
     __ISB();
