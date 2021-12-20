@@ -28,12 +28,15 @@ uintptr_t hs_context_switch(uintptr_t sp);
 // Context switcher; called from PendSV_Handler
 uintptr_t hs_context_switch(uintptr_t sp)
 {
+    // Save current task's stackpointer
     current_task->sp_current = sp;
+    // Simple round-robin scheduling
     current_task = current_task->next;
     if (!current_task) {
         // End of list reached; start again at beginning
         current_task = tasks_running;
     }
+    // Return next task's stackpointer
     return current_task->sp_current;
 }
 
@@ -43,7 +46,7 @@ static void hs_task_insert(hs_task_t* t, hs_task_t** list)
     // Find last task in list
     hs_task_t* tail;
     for (tail = *list; tail->next; tail = tail->next) {
-    };
+    }
     tail->next = t;
     // This is now the last element in the list
     t->next = NULL;
@@ -54,7 +57,7 @@ static void hs_task_remove(hs_task_t* t, hs_task_t** list)
 {
     hs_task_t* prev;
     for (prev = *list; prev->next && prev->next != t; prev = prev->next) {
-    };
+    }
     if (prev->next != t) {
         // List element not found
         return;
@@ -74,10 +77,9 @@ static void noreturn hs_task_wrapper(hs_task_t* task, task_fn_t task_fn, void* t
     hs_yield();
 
     while (1) {
-    };
+    }
 }
 
-// Create task and add it to the list of running tasks
 void hs_task_create(hs_task_t* task,
                     task_fn_t task_fn,
                     void* task_arg,
@@ -87,15 +89,15 @@ void hs_task_create(hs_task_t* task,
     // Initialize task struct
     *task = (hs_task_t){
         .stack_bottom = (uintptr_t)stack,
-        .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,
+        .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,  // Align to 8
         .next = NULL,
     };
 
     // Initialize stack with initial context
     *((context_t*)task->sp_current) = (context_t){
-        .xpsr = 1 << 24,  // set T-bit
-        .pc = (uint32_t)hs_task_wrapper,
-        .lr = 0,  // end of call stack
+        .xpsr = 1 << 24,                  // Thumb state; must be 1
+        .pc = (uint32_t)hs_task_wrapper,  // Wrapper fn to call the actual task
+        .lr = 0,                          // End of call stack
         .r0 = (uint32_t)task,
         .r1 = (uint32_t)task_fn,
         .r2 = (uint32_t)task_arg,
@@ -107,7 +109,8 @@ void hs_task_create(hs_task_t* task,
 
 void hs_init(void)
 {
-    const uint32_t handler_prio = 255;  // lowest priority
+    // Set scheduler to lowest priority
+    const uint32_t handler_prio = 255;
     NVIC_SetPriority(PendSV_IRQn, handler_prio);
 }
 
@@ -123,13 +126,13 @@ __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm(
         ".syntax unified            \n"
-        "mrs r0, msp                \n"  // Save stack pointer
-        "stmdb r0!, {r4-r11}        \n"  // Store rest of the context
-        "ldr r12, =hs_context_switch\n"
-        "blx r12                    \n"
-        "ldmia r0!, {r4-r11}        \n"
-        "mvn lr, #~0xfffffff9       \n"
-        "msr msp, r0                \n"
-        "bx lr                      \n"
+        "mrs r0, msp                \n"  // Save main stack pointer; not using process sp here
+        "stmdb r0!, {r4-r11}        \n"  // Store rest of the context; r0-r3/r12-r15 already stored by hw
+        "ldr r12, =hs_context_switch\n"  // Call context switcher
+        "blx r12                    \n"  // receives stackpointer of current task; returns stackpointer of next task
+        "ldmia r0!, {r4-r11}        \n"  // Restore context of next task
+        "mvn lr, #~0xfffffff9       \n"  // EXC_RETURN magic to return from exception to thread mode w/ main stack
+        "msr msp, r0                \n"  // Restore main stack pointer of next task
+        "bx lr                      \n"  // Return from exception
         ".syntax divided            \n");
 }
