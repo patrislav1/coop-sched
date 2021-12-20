@@ -107,3 +107,18 @@ void hs_yield(void)
     __DSB();
     __ISB();
 }
+
+__attribute__((naked)) void PendSV_Handler(void)
+{
+    __asm(
+        ".syntax unified            \n"
+        "mrs r0, msp                \n"  // Save stack pointer
+        "stmdb r0!, {r4-r11}        \n"  // Store rest of the context
+        "ldr r12, =hs_context_switch\n"
+        "blx r12                    \n"
+        "ldmia r0!, {r4-r11}        \n"
+        "mvn lr, #~0xfffffff9       \n"
+        "msr msp, r0                \n"
+        "bx lr                      \n"
+        ".syntax divided            \n");
+}
