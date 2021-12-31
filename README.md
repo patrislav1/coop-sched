@@ -1,5 +1,5 @@
-# handshake
+# coop-sched
 
-A minimalistic context switcher for cooperative multitasking.
+A minimalistic scheduler / context switcher for cooperative multitasking.
 
 ## Under construction / work in progress
