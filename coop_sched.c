@@ -4,8 +4,7 @@
 #include <stdint.h>
 #include <stdnoreturn.h>
 
-// platform specific includes
-#include "sam4l.h"
+#include "platform.h"
 
 // Main task represents the task from which all other tasks are started
 static coop_task_t main_task = {0};
