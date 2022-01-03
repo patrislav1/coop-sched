@@ -21,6 +21,8 @@ typedef struct context {
 
 #pragma GCC diagnostic pop
 
+void __attribute__((weak)) emergency_print(const char* str) {}
+
 // Prototype to make gcc happy (inline asm doesn't find static functions)
 uintptr_t context_switch(uintptr_t sp);
 
@@ -77,8 +79,11 @@ static void noreturn task_wrapper(coop_task_t* task, coop_task_fn_t task_fn, voi
     task_remove(task, &tasks_running);
     sched_yield();
 
+    emergency_print("internal error: return from scheduler\r\n");
+    // TODO throw exception
+    // make noreturn happy
     while (1) {
-    }
+    };
 }
 
 void sched_create_task(coop_task_t* task,

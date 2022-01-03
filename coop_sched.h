@@ -23,3 +23,6 @@ void sched_create_task(coop_task_t* task,
 
 // Trigger scheduler
 void sched_yield(void);
+
+// Optional function to be defined by the user
+void emergency_print(const char* str);
