@@ -157,13 +157,13 @@ __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm(
         ".syntax unified            \n"
-        "mrs r0, msp                \n"  // Save main stack pointer; not using process sp here
-        "stmdb r0!, {r4-r11}        \n"  // Store rest of the context; r0-r3/r12-r15 already stored by hw
+        "push {r4-r11}              \n"  // Store rest of the context; r0-r3/r12-r15 already stored by hw
+        "mov r0, sp                 \n"
         "ldr r12, =context_switch   \n"  // Call context switcher
         "blx r12                    \n"  // receives stackpointer of current task; returns stackpointer of next task
-        "ldmia r0!, {r4-r11}        \n"  // Restore context of next task
+        "mov sp, r0                 \n"
+        "pop {r4-r11}               \n"  // Restore context of next task
         "mvn lr, #~0xfffffff9       \n"  // EXC_RETURN magic to return from exception to thread mode w/ main stack
-        "msr msp, r0                \n"  // Restore main stack pointer of next task
         "bx lr                      \n"  // Return from exception
         ".syntax divided            \n");
 }
