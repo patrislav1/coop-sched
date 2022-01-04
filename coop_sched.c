@@ -16,13 +16,28 @@ static coop_task_t *tasks_running = &main_task, *current_task = &main_task;
 #pragma GCC diagnostic ignored "-Wpacked"
 
 typedef struct context {
-    uint32_t r4, r5, r6, r7, r8, r9, r10, r11;   // Context stored explicitly (by software)
+    uint32_t r4, r5, r6, r7, r8, r9, r10, r11,   // Context stored explicitly (by software)
+        exc_return;                              // Exception return code (lr in exception scope)
     uint32_t r0, r1, r2, r3, r12, lr, pc, xpsr;  // Context stored implicitly (by hardware)
 } __attribute__((packed)) context_t;
 
 #pragma GCC diagnostic pop
 
 #define STACK_WATERMARK_MAGIC 0xa5
+
+#define BIT(x) (1 << x)
+
+// Cortex-M4 Devices Generic User Guide, Table 2-17, Exception return behavior
+#define EXC_RET_MAGIC 0xFFFFFFFD
+
+// Reset these bits from EXC_RET_MAGIC to assert
+#define EXC_RET_FP_BIT BIT(4)
+#define EXC_RET_HANDLER_BIT BIT(3)
+#define EXC_RET_MSP_BIT BIT(2)
+
+#define EXC_RET_HANDLER (EXC_RET_MAGIC & ~(EXC_RET_HANDLER_BIT | EXC_RET_MSP_BIT))
+#define EXC_RET_THREAD_MSP (EXC_RET_MAGIC & ~(EXC_RET_MSP_BIT))
+#define EXC_RET_THREAD_PSP (EXC_RET_MAGIC)
 
 void __attribute__((weak)) emergency_print(const char* str) {}
 
@@ -114,6 +129,7 @@ void sched_create_task(coop_task_t* task,
         .xpsr = 1 << 24,               // Thumb state; must be 1
         .pc = (uint32_t)task_wrapper,  // Wrapper fn to call the actual task
         .lr = 0,                       // End of call stack
+        .exc_return = EXC_RET_THREAD_PSP,
         .r0 = (uint32_t)task,
         .r1 = (uint32_t)task_fn,
         .r2 = (uint32_t)task_arg,
@@ -155,15 +171,25 @@ size_t get_stack_watermark(coop_task_t* task)
 
 __attribute__((naked)) void PendSV_Handler(void)
 {
-    __asm(
-        ".syntax unified            \n"
-        "push {r4-r11}              \n"  // Store rest of the context; r0-r3/r12-r15 already stored by hw
-        "mov r0, sp                 \n"
-        "ldr r12, =context_switch   \n"  // Call context switcher
-        "blx r12                    \n"  // receives stackpointer of current task; returns stackpointer of next task
-        "mov sp, r0                 \n"
-        "pop {r4-r11}               \n"  // Restore context of next task
-        "mvn lr, #~0xfffffff9       \n"  // EXC_RETURN magic to return from exception to thread mode w/ main stack
-        "bx lr                      \n"  // Return from exception
-        ".syntax divided            \n");
+    asm("  tst lr, #0x04              ");  // Check if current task's context lives on MSP or PSP
+    asm("  bne store_to_psp           ");
+    asm("  push {r4-r11, lr}          ");  // MSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
+    asm("  mov r0, sp                 ");  // MSP: Pass stack pointer as argument to context switcher
+    asm("  b do_ctx_sw                ");
+    asm("store_to_psp:              ");
+    asm("  mrs r0, psp                ");  // PSP: Pass stack pointer as argument to context switcher
+    asm("  stmdb r0!, {r4-r11, lr}    ");  // PSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
+    asm("do_ctx_sw:                 ");
+    asm("  ldr r12, =context_switch   ");  // Call context switcher
+    asm("  blx r12                    ");  // receives stackpointer of current task; returns stackpointer of next task
+    asm("  ldr r1, [r0, #(8*4)]       ");  // Load lr from stored contect
+    asm("  tst r1, #0x04              ");  // Check if thread context lives on MSP or PSP
+    asm("  bne restore_from_psp       ");
+    asm("  mov sp, r0                 ");  // Set new MSP stack pointer
+    asm("  pop {r4-r11, lr}           ");  // Restore context of next task
+    asm("  bx lr                      ");  // Return from exception
+    asm("restore_from_psp:          ");
+    asm("  ldmia r0!, {r4-r11, lr}    ");  // Restore context of next task
+    asm("  msr psp, r0                ");  // Set new PSP stack pointer
+    asm("  bx lr                      ");  // Return from exception
 }
