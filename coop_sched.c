@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdnoreturn.h>
+#include <string.h>
 
 #include "platform.h"
 
@@ -20,6 +21,8 @@ typedef struct context {
 } __attribute__((packed)) context_t;
 
 #pragma GCC diagnostic pop
+
+#define STACK_WATERMARK_MAGIC 0xa5
 
 void __attribute__((weak)) emergency_print(const char* str) {}
 
@@ -92,9 +95,16 @@ void sched_create_task(coop_task_t* task,
                        uint8_t* stack,
                        size_t stack_size)
 {
+#ifdef ENABLE_STACK_WATERMARK
+    memset(stack, STACK_WATERMARK_MAGIC, stack_size);
+#endif
+
     // Initialize task struct
     *task = (coop_task_t){
         .stack_bottom = (uintptr_t)stack,
+#ifdef ENABLE_STACK_WATERMARK
+        .stack_top = (uintptr_t)(stack + stack_size),
+#endif
         .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,  // Align to 8
         .next = NULL,
     };
@@ -127,6 +137,21 @@ void sched_yield(void)
     __DSB();
     __ISB();
 }
+
+#ifdef ENABLE_STACK_WATERMARK
+size_t get_stack_watermark(coop_task_t* task)
+{
+    if (task == &main_task) {
+        // Watermark not supported for main task
+        return 0;
+    }
+    uint8_t* ptr = (uint8_t*)task->stack_bottom;
+    while (*ptr == STACK_WATERMARK_MAGIC && (uintptr_t)ptr < task->stack_top) {
+        ptr++;
+    }
+    return task->stack_top - (uintptr_t)ptr;
+}
+#endif
 
 __attribute__((naked)) void PendSV_Handler(void)
 {

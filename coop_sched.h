@@ -6,6 +6,9 @@
 typedef struct coop_task {
     uintptr_t sp_current;
     uintptr_t stack_bottom;
+#ifdef ENABLE_STACK_WATERMARK
+    uintptr_t stack_top;
+#endif
     struct coop_task* next;
 } coop_task_t;
 
@@ -26,3 +29,7 @@ void sched_yield(void);
 
 // Optional function to be defined by the user
 void emergency_print(const char* str);
+
+#ifdef ENABLE_STACK_WATERMARK
+size_t get_stack_watermark(coop_task_t* task);
+#endif
