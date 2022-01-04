@@ -171,25 +171,56 @@ size_t get_stack_watermark(coop_task_t* task)
 
 __attribute__((naked)) void PendSV_Handler(void)
 {
-    asm("  tst lr, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if curr.task's context lives on MSP or PSP
-    asm("  bne store_to_psp           ");
+    // Store context on task stack...
+    asm("  tst lr, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if curr. task context lives on MSP or PSP
+    asm("  bne store_to_psp           ");        //
+
+    // Store context on MSP stack
+#if __FPU_USED
+    asm("  tst lr, %0" ::"i"(EXC_RET_FP_BIT));  // Check if curr. task context includes ext.FP frame
+    asm("  it eq                      ");       //
+    asm("  vpusheq {s16-s31}          ");       // Store extended FPU registers
+#endif
     asm("  push {r4-r11, lr}          ");  // MSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
     asm("  mov r0, sp                 ");  // MSP: Pass stack pointer as argument to context switcher
-    asm("  b do_ctx_sw                ");
+    asm("  b do_ctx_sw                ");  // MSP: Proceed to ctx switch
+
+    // Store context on PSP stack
     asm("store_to_psp:                ");
-    asm("  mrs r0, psp                ");  // PSP: Pass stack pointer as argument to context switcher
+    asm("  mrs r0, psp                ");  // PSP: Get stack pointer for passing to context switcher
+#if __FPU_USED
+    asm("  tst lr, %0" ::"i"(EXC_RET_FP_BIT));  // Check if curr. task context includes FP frame
+    asm("  it eq                      ");       //
+    asm("  vstmdbeq r0!, {s16-s31}    ");       // Store extended FPU registers
+#endif
     asm("  stmdb r0!, {r4-r11, lr}    ");  // PSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
+
+    // Perform context switch
     asm("do_ctx_sw:                   ");
     asm("  ldr r12, =context_switch   ");  // Call context switcher
     asm("  blx r12                    ");  // receives sp of current task; returns sp of next task
     asm("  ldr r1, [r0, #(8*4)]       ");  // Load lr from stored context
-    asm("  tst r1, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if next thread context lives on MSP or PSP
+    asm("  tst r1, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if next task context lives on MSP or PSP
     asm("  bne restore_from_psp       ");
+
+    // Restore context from MSP stack
     asm("  mov sp, r0                 ");  // Set new MSP stack pointer
     asm("  pop {r4-r11, lr}           ");  // Restore context of next task
+#if __FPU_USED
+    asm("  tst lr, %0" ::"i"(EXC_RET_FP_BIT));  // Check if next task context includes FP frame
+    asm("  it eq                      ");       //
+    asm("  vpopeq {s16-s31}           ");       // Restore extended FP registers
+#endif
     asm("  bx lr                      ");  // Return from exception
+
+    // Restore context from PSP stack
     asm("restore_from_psp:            ");
     asm("  ldmia r0!, {r4-r11, lr}    ");  // Restore context of next task
+#if __FPU_USED
+    asm("  tst lr, %0" ::"i"(EXC_RET_FP_BIT));  // Check if next task context includes FP frame
+    asm("  it eq                      ");       //
+    asm("  vldmiaeq r0!, {s16-s31}    ");       // Restore extended FP registers
+#endif
     asm("  msr psp, r0                ");  // Set new PSP stack pointer
     asm("  bx lr                      ");  // Return from exception
 }
