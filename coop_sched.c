@@ -171,24 +171,24 @@ size_t get_stack_watermark(coop_task_t* task)
 
 __attribute__((naked)) void PendSV_Handler(void)
 {
-    asm("  tst lr, #0x04              ");  // Check if current task's context lives on MSP or PSP
+    asm("  tst lr, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if curr.task's context lives on MSP or PSP
     asm("  bne store_to_psp           ");
     asm("  push {r4-r11, lr}          ");  // MSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
     asm("  mov r0, sp                 ");  // MSP: Pass stack pointer as argument to context switcher
     asm("  b do_ctx_sw                ");
-    asm("store_to_psp:              ");
+    asm("store_to_psp:                ");
     asm("  mrs r0, psp                ");  // PSP: Pass stack pointer as argument to context switcher
     asm("  stmdb r0!, {r4-r11, lr}    ");  // PSP: Store rest of the context; r0-r3/r12-r15 already stored by hw
-    asm("do_ctx_sw:                 ");
+    asm("do_ctx_sw:                   ");
     asm("  ldr r12, =context_switch   ");  // Call context switcher
-    asm("  blx r12                    ");  // receives stackpointer of current task; returns stackpointer of next task
-    asm("  ldr r1, [r0, #(8*4)]       ");  // Load lr from stored contect
-    asm("  tst r1, #0x04              ");  // Check if thread context lives on MSP or PSP
+    asm("  blx r12                    ");  // receives sp of current task; returns sp of next task
+    asm("  ldr r1, [r0, #(8*4)]       ");  // Load lr from stored context
+    asm("  tst r1, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if next thread context lives on MSP or PSP
     asm("  bne restore_from_psp       ");
     asm("  mov sp, r0                 ");  // Set new MSP stack pointer
     asm("  pop {r4-r11, lr}           ");  // Restore context of next task
     asm("  bx lr                      ");  // Return from exception
-    asm("restore_from_psp:          ");
+    asm("restore_from_psp:            ");
     asm("  ldmia r0!, {r4-r11, lr}    ");  // Restore context of next task
     asm("  msr psp, r0                ");  // Set new PSP stack pointer
     asm("  bx lr                      ");  // Return from exception
