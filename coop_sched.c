@@ -54,14 +54,14 @@ static void panic_hexdump(uint32_t val)
     }
 }
 
-static void task_fatal_error(const coop_task_t* task, const char* err_msg)
+static void noreturn task_fatal_error(const coop_task_t* task, const char* err_msg)
 {
     panic_print("Fatal error for task ");
     panic_hexdump((uint32_t)task);
     panic_print(": ");
     panic_print(err_msg);
     panic_print("\r\n");
-    // TODO throw exception
+
     while (1) {
     };
 }
@@ -130,11 +130,7 @@ static void noreturn task_wrapper(coop_task_t* task, coop_task_fn_t task_fn, voi
     task_remove(task, &tasks_running);
     sched_yield();
 
-    panic_print("internal error: return from scheduler\r\n");
-    // TODO throw exception
-    // make noreturn happy
-    while (1) {
-    };
+    task_fatal_error(task, "Removed task called from scheduler");
 }
 
 void sched_create_task(coop_task_t* task,
@@ -208,6 +204,7 @@ size_t get_stack_watermark(coop_task_t* task)
 
 __attribute__((naked)) void PendSV_Handler(void)
 {
+    asm("  isb                        ");
     // Store context on task stack...
     asm("  tst lr, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if curr. task context lives on MSP or PSP
     asm("  bne store_to_psp           ");        //
@@ -234,8 +231,8 @@ __attribute__((naked)) void PendSV_Handler(void)
 
     // Perform context switch
     asm("do_ctx_sw:                   ");
-    asm("  ldr r12, =context_switch   ");  // Call context switcher
-    asm("  blx r12                    ");  // receives sp of current task; returns sp of next task
+    asm("  dsb                        ");  // Call context switcher
+    asm("  bl context_switch          ");  // receives sp of current task; returns sp of next task
     asm("  ldr r1, [r0, #(8*4)]       ");  // Load lr from stored context
     asm("  tst r1, %0" ::"i"(EXC_RET_MSP_BIT));  // Check if next task context lives on MSP or PSP
     asm("  bne restore_from_psp       ");
@@ -248,6 +245,7 @@ __attribute__((naked)) void PendSV_Handler(void)
     asm("  it eq                      ");       //
     asm("  vpopeq {s16-s31}           ");       // Restore extended FP registers
 #endif
+    asm("  isb                        ");
     asm("  bx lr                      ");  // Return from exception
 
     // Restore context from PSP stack
@@ -259,5 +257,6 @@ __attribute__((naked)) void PendSV_Handler(void)
     asm("  vldmiaeq r0!, {s16-s31}    ");       // Restore extended FP registers
 #endif
     asm("  msr psp, r0                ");  // Set new PSP stack pointer
+    asm("  isb                        ");
     asm("  bx lr                      ");  // Return from exception
 }
