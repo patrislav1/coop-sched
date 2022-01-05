@@ -120,7 +120,8 @@ void sched_create_task(coop_task_t* task,
 #ifdef ENABLE_STACK_WATERMARK
         .stack_top = (uintptr_t)(stack + stack_size),
 #endif
-        .sp_current = ((uintptr_t)(stack) + stack_size - sizeof(context_t)) & ~7,  // Align to 8
+        .sp_current = (((uintptr_t)(stack) + stack_size) & ~7) -  // Align top of stack to 8
+                      sizeof(context_t),
         .next = NULL,
     };
 
