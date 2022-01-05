@@ -39,16 +39,49 @@ typedef struct context {
 #define EXC_RET_THREAD_MSP (EXC_RET_MAGIC & ~(EXC_RET_MSP_BIT))
 #define EXC_RET_THREAD_PSP (EXC_RET_MAGIC)
 
-void __attribute__((weak)) emergency_print(const char* str) {}
+void __attribute__((weak)) panic_print(const char* str) {}
 
 // Prototype to make gcc happy (inline asm doesn't find static functions)
 uintptr_t context_switch(uintptr_t sp);
+
+static void panic_hexdump(uint32_t val)
+{
+    panic_print("0x");
+    for (int rshift = 28; rshift >= 0; rshift -= 4) {
+        uint32_t tmp = (val >> rshift) & 0x0f;
+        char str[2] = {tmp >= 10 ? tmp + 'a' - 10 : tmp + '0', '\0'};
+        panic_print(str);
+    }
+}
+
+static void task_fatal_error(const coop_task_t* task, const char* err_msg)
+{
+    panic_print("Fatal error for task ");
+    panic_hexdump((uint32_t)task);
+    panic_print(": ");
+    panic_print(err_msg);
+    panic_print("\r\n");
+    // TODO throw exception
+    while (1) {
+    };
+}
 
 // Context switcher; called from PendSV_Handler
 uintptr_t context_switch(uintptr_t sp)
 {
     // Save current task's stackpointer
     current_task->sp_current = sp;
+
+    // Stack checking not supported for main task
+    if (current_task != &main_task) {
+        if (current_task->sp_current < current_task->stack_bottom) {
+            task_fatal_error(current_task, "Stack overflow (sp beyond stack bottom)");
+        }
+        if (*((uint8_t*)current_task->stack_bottom) != STACK_WATERMARK_MAGIC) {
+            task_fatal_error(current_task, "Stack overflow (canary dead)");
+        }
+    }
+
     // Simple round-robin scheduling
     current_task = current_task->next;
     if (!current_task) {
@@ -97,7 +130,7 @@ static void noreturn task_wrapper(coop_task_t* task, coop_task_fn_t task_fn, voi
     task_remove(task, &tasks_running);
     sched_yield();
 
-    emergency_print("internal error: return from scheduler\r\n");
+    panic_print("internal error: return from scheduler\r\n");
     // TODO throw exception
     // make noreturn happy
     while (1) {
@@ -112,6 +145,9 @@ void sched_create_task(coop_task_t* task,
 {
 #ifdef ENABLE_STACK_WATERMARK
     memset(stack, STACK_WATERMARK_MAGIC, stack_size);
+#else
+    // just set canary
+    *stack = STACK_WATERMARK_MAGIC;
 #endif
 
     // Initialize task struct

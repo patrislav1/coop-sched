@@ -28,7 +28,7 @@ void sched_create_task(coop_task_t* task,
 void sched_yield(void);
 
 // Optional function to be defined by the user
-void emergency_print(const char* str);
+void panic_print(const char* str);
 
 #ifdef ENABLE_STACK_WATERMARK
 size_t get_stack_watermark(coop_task_t* task);
