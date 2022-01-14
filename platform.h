@@ -8,6 +8,8 @@
 #elif defined(STM32L433xx)
 /* STM32L433 */
 #include "stm32l433xx.h"
+#elif defined(STM32F103xB)
+#include "stm32f103xb.h"
 #else
 #error "no platform defined"
 #endif
