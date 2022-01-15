@@ -9,6 +9,7 @@
 /* STM32L433 */
 #include "stm32l433xx.h"
 #elif defined(STM32F103xB)
+/* STM32F103 (e.g. Blue Pill) */
 #include "stm32f103xb.h"
 #else
 #error "no platform defined"

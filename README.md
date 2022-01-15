@@ -16,7 +16,7 @@ The whole project is less than 250 lines of code, and compiled size is significa
 
 ## Supported MCUs
 
-At the moment, MCUs based on Cortex-M4 (both with and without FPU) are supported. ATSAM4L and STM32L433 are supported out of the box; more MCUs will be added in the future.
+At the moment, MCUs based on Cortex-M3 and -M4 (both with and without FPU) are supported. ATSAM4L, STM32L433 and STM32F103 are supported out of the box; more MCUs will be added in the future.
 
 ## TODO
 
