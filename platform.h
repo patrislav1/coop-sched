@@ -11,6 +11,8 @@
 #elif defined(STM32F103xB)
 /* STM32F103 (e.g. Blue Pill) */
 #include "stm32f103xb.h"
+#elif defined(STM32F401xC)
+#include "stm32f401xc.h"
 #else
 #error "no platform defined"
 #endif
